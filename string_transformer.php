@@ -81,8 +81,10 @@ class MergeCommand extends ACommand{
 		foreach($localizations as $loc){
 			$key = strtolower($loc["ResName"]);
 			$value = $loc["ResValue"];
+			if(strlen(trim($value)) == 0){
+				continue;
+			}
 			if(strpos($value,"DOCTYPE") !== false && strpos($value,"CDATA") === false){
-				
 				$value = "<![CDATA[" . $value . "]]>";
 				//echo $value . "\n\n\n";
 			}
