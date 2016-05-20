@@ -70,13 +70,13 @@ class CommandExecuter{
 }
 
 
+
+
+
 class MergeCommand extends ACommand{
 	public function executeCommand($params){
-		$source = json_decode(file_get_contents($params["source"]),true);
 		$target = file_get_contents($params["target"]);	
-		$localizations = $source["ClientLocalizations"];
-
-
+		$localizations = new PackageParser().parse(file_get_contents($params["source"]));
 
 		foreach($localizations as $loc){
 			$key = strtolower($loc["ResName"]);
@@ -102,7 +102,77 @@ class MergeCommand extends ACommand{
 		return "merge";
 	}
 }
+
+interface LocalizationFileParser{
+	function parse($fileContent);
+}
+class AndroidParser implements LocalizationFileParser{
+	function parse($fileContent){
+
+	}
+}
+class IOSParser implements LocalizationFileParser{
+	function parse($fileContent){
+		$ret = [];
+		$matches = [];
+		$ret = preg_match_all('/"(.*)" = "(.*)";/misU', $fileContent, $matches, PREG_SET_ORDER);
+		var_dump($ret);
+		return $matches;
+	}
+}
+class PackageParser implements LocalizationFileParser{
+	function parse($fileContent){
+		$content = json_decode($fileContent,true,true);
+		$lastError = json_last_error();
+		if($lastError != JSON_ERROR_NONE){
+			throw new Exception("PackageParser JSON error: " + $lastError);
+		}
+		if(!isset($content["ClientLocalizations"])){
+			throw new Exception("A JSON filenak mindenkeppen tartalmaznia kell egy ClientLocalizations kulcsot a gyokerben!");
+		}
+		return $content["ClientLocalizations"];
+	}
+}
+
+class CheckCommand extends ACommand{
+	public function executeCommand($params){
+		$source = file_get_contents($params["source"]);
+		$target = file_get_contents($params["target"]);
+		$sourceFileExtension = $this->getFileExtension($params["source"]);
+		$targetFileExtension = $this->getFileExtension($params["target"]);
+		var_dump($this->getParserByFileExtension($sourceFileExtension)->parse($source));
+	}
+	public function requiredParameters(){
+		return ["source","target"];
+	}
+	public function getCommandName(){
+		return "check";
+	}
+
+	private function getParserByFileExtension($fileExt){
+		$fileExt = strtolower($fileExt);
+		switch($fileExt){
+			case "strings":{
+				return new IOSParser();
+			}
+			case "xml":{
+				return new AndroidParser();
+			}
+			case "json":{
+				return new PackageParser();
+			}
+			default:{
+				throw new Exception("A kert kiterjeszteshez nem letezik parser: " + $fileExt);
+			}
+		}
+	}
+	private function getFileExtension($fileName){
+		return end(explode(".",$fileName));
+	}
+}
 CommandExecuter::registerCommand(new MergeCommand());
+CommandExecuter::registerCommand(new CheckCommand());
+
 
 CommandExecuter::getInstance()->execute($argv);
 
