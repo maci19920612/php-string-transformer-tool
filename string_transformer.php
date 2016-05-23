@@ -89,7 +89,7 @@ class MergeCommand extends ACommand{
 				//echo $value . "\n\n\n";
 			}
 			$count = 0;
-			$target = preg_replace('/<string name="'.$key.'">.*<\/string>/misU','<string name="'.$key.'">'.$value.'</string>',$target,-1,$count);
+			$target = preg_match_all('/<string name="'.$key.'">.*<\/string>/misU','<string name="'.$key.'">'.$value.'</string>',$target,-1,$count);
 			echo $key . " " .  $count . "\n";
 		}
 
@@ -108,16 +108,31 @@ interface LocalizationFileParser{
 }
 class AndroidParser implements LocalizationFileParser{
 	function parse($fileContent){
-
+		$xml = simplexml_load_string($fileContent);
+		if($xml === false){
+			throw new Exception("Az XML nem volt megfelelo formatumu!");
+		}
+		$ret = [];
+		foreach($xml->children() as $string){
+			$key = (string)$string->attributes()["name"];
+			$value = (string)$string;
+			$ret[$key] = $value;
+		}
+		return $ret;
 	}
 }
 class IOSParser implements LocalizationFileParser{
 	function parse($fileContent){
-		$ret = [];
 		$matches = [];
-		$ret = preg_match_all('/"(.*)" = "(.*)";/misU', $fileContent, $matches, PREG_SET_ORDER);
-		var_dump($ret);
-		return $matches;
+		preg_match_all('/"(.*)"\s*=\s*"(.*)";/misU', $fileContent, $matches, PREG_PATTERN_ORDER);
+		$ret = [];
+		if(count($matches) < 3 || count($matches[1]) != count($matches[2])){
+			throw new Exception("A strings file tartalma nem volt megfelelo!");
+		}
+		for($i = 0;$i<count($matches[1]);$i++){
+			$ret[$matches[1][$i]] = $matches[2][$i];
+		}
+		return $ret;
 	}
 }
 class PackageParser implements LocalizationFileParser{
@@ -140,7 +155,24 @@ class CheckCommand extends ACommand{
 		$target = file_get_contents($params["target"]);
 		$sourceFileExtension = $this->getFileExtension($params["source"]);
 		$targetFileExtension = $this->getFileExtension($params["target"]);
-		var_dump($this->getParserByFileExtension($sourceFileExtension)->parse($source));
+		
+		$source = $this->getParserByFileExtension($sourceFileExtension)->parse($source);
+		$target = $this->getParserByFileExtension($targetFileExtension)->parse($target);
+
+		$notExistKeysInTarget = [];
+		foreach($source as $key=>$val){
+			if(!isset($target[strtolower($key)]) && !isset($target[strtoupper($key)])){
+				$notExistKeysInTarget[] = $key;
+			}
+		}
+		echo count($notExistKeysInTarget);
+		echo "\n----------------------------\nA target-ban nem letezo kulcsok:\n";
+		$i = 0;
+		foreach($notExistKeysInTarget as $s){
+			echo $i . ":\t" . $s . PHP_EOL;
+			$i++;
+		}
+		echo "----------------------------" . PHP_EOL;
 	}
 	public function requiredParameters(){
 		return ["source","target"];
